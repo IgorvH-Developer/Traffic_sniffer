@@ -15,78 +15,68 @@
 /**
  * An auxiliary struct for encapsulating rate stats
  */
-struct Rate
-{
-	double currentRate; // periodic rate
-	double totalRate;	 // overlal rate
+// struct Rate
+// {
+// 	double currentRate; // periodic rate
+// 	double totalRate;	 // overlal rate
 
-	void clear()
-	{
-		currentRate = 0;
-		totalRate = 0;
-	}
-};
+// 	void clear()
+// 	{
+// 		currentRate = 0;
+// 		totalRate = 0;
+// 	}
+// };
 
 
 /**
- * A struct for collecting general SSL/TLS stats
+ * A struct for collecting general stats
  */
-struct SSLGeneralStats
+struct GeneralStats
 {
-	int numOfSSLPackets; // total number of SSL packets
-	Rate sslPacketRate; // rate of SSL packets
-	int amountOfSSLTraffic; // total SSL traffic in bytes
-	Rate sslTrafficRate; // rate of SSL traffic
+	int numOfPackets; // total number of packets
+	int packetPeriod; // rate of packets
+	int amountOfTraffic; // total traffic in bytes
+	int trafficPeriod; // rate of traffic
 	double sampleTime; // total stats collection time
 
 	void clear()
 	{
-		numOfSSLPackets = 0;
-		sslPacketRate.currentRate = 0;
-		sslPacketRate.totalRate = 0;
-		amountOfSSLTraffic = 0;
-		sslTrafficRate.currentRate = 0;
-		sslTrafficRate.totalRate = 0;
+		numOfPackets = 0;
+		packetPeriod = 0;
+		amountOfTraffic = 0;
+		trafficPeriod = 0;
 		sampleTime = 0;
 	}
 };
 
 
 /**
- * A base struct for collecting stats on client-hello messages
+ * A base struct for collecting stats about hosts
  */
 struct HostsStats
 {
-	int numOfMessages; // total number of client-hello messages
-	Rate messageRate; // rate of client-hello messages
 	std::map<std::string, int> serverTrafficInput; // a map for counting the server's traffic  (ip, traffic)
-	std::map<std::string, Rate> serverTrafficInputRate; // (ip, trafficRate)
+	std::map<std::string, int> serverTrafficInputPeriod; // (ip, trafficRate)
 	std::map<std::string, int> serverTrafficOutput; // a map for counting the server's traffic  (ip, traffic)
-	std::map<std::string, Rate> serverTrafficOutputRate; // (ip, trafficRate)
+	std::map<std::string, int> serverTrafficOutputPeriod; // (ip, trafficRate)
 	std::map<std::string, int> serverPaketsInput; //  (ip, packetsCount)
-	std::map<std::string, Rate> serverPaketsInputRate; // (ip, packetsCountRate)
+	std::map<std::string, int> serverPaketsInputPeriod; // (ip, packetsCountRate)
 	std::map<std::string, int> serverPaketsOutput; //  (ip, packetsCount)
-	std::map<std::string, Rate> serverPaketsOutputRate; // (ip, packetsCountRate)
+	std::map<std::string, int> serverPaketsOutputPeriod; // (ip, packetsCountRate)
 	std::map<std::string, std::string> serverName; // a map for matching ip and host name  (ip, hostName)
 
 	virtual ~HostsStats() {}
 
 	virtual void clear()
 	{
-		numOfMessages = 0;
-		messageRate.currentRate = 0;
-		messageRate.totalRate = 0;
 		serverTrafficInput.clear();
-		for(auto& item : serverTrafficInputRate) 
+		serverTrafficInputPeriod.clear();
 		serverTrafficOutput.clear();
-		for(auto& item : serverTrafficOutputRate) 
-			item.second.clear();
+		serverTrafficOutputPeriod.clear();
 		serverPaketsInput.clear();
-		for(auto& item : serverPaketsInputRate) 
-			item.second.clear();
+		serverPaketsInputPeriod.clear();
 		serverPaketsOutput.clear();
-		for(auto& item : serverPaketsOutputRate) 
-			item.second.clear();
+		serverPaketsOutputPeriod.clear();
 		serverName.clear();
 	}
 };
@@ -94,7 +84,7 @@ struct HostsStats
 
 
 /**
- * The SSL stats collector. Should be called for every packet arriving and also periodically to calculate rates
+ * The stats collector. Should be called for every packet arriving and also periodically to calculate rates
  */
 class StatsCollector
 {
@@ -156,48 +146,24 @@ public:
 		// last rate calculation until now
 		if (diffSec != 0)
 		{
-			m_GeneralStats.sslTrafficRate.currentRate = (m_GeneralStats.amountOfSSLTraffic - m_PrevGeneralStats.amountOfSSLTraffic) / diffSec;
-			m_GeneralStats.sslPacketRate.currentRate = (m_GeneralStats.numOfSSLPackets - m_PrevGeneralStats.numOfSSLPackets) / diffSec;
-			m_HostsStats.messageRate.currentRate = (m_HostsStats.numOfMessages - m_PrevHostsStats.numOfMessages) / diffSec;
+			m_GeneralStats.trafficPeriod = (m_GeneralStats.amountOfTraffic - m_PrevGeneralStats.amountOfTraffic) / diffSec;
+			m_GeneralStats.packetPeriod = (m_GeneralStats.numOfPackets - m_PrevGeneralStats.numOfPackets) / diffSec;
 
 			for(auto& item : m_HostsStats.serverTrafficInput) {
 				std::string hostName = item.first;
-				m_HostsStats.serverTrafficInputRate[hostName].currentRate = 
+				m_HostsStats.serverTrafficInputPeriod[hostName] = 
 					m_HostsStats.serverTrafficInput[hostName] - m_PrevHostsStats.serverTrafficInput[hostName];
-				m_HostsStats.serverPaketsInputRate[hostName].currentRate = 
+				m_HostsStats.serverPaketsInputPeriod[hostName] = 
 					m_HostsStats.serverPaketsInput[hostName] - m_PrevHostsStats.serverPaketsInput[hostName];
 			}
 			for(auto& item : m_HostsStats.serverTrafficOutput) {
 				std::string hostName = item.first;
-				m_HostsStats.serverTrafficOutputRate[hostName].currentRate = 
+				m_HostsStats.serverTrafficOutputPeriod[hostName] = 
 					m_HostsStats.serverTrafficOutput[hostName] - m_PrevHostsStats.serverTrafficOutput[hostName];
-				m_HostsStats.serverPaketsOutputRate[hostName].currentRate = 
+				m_HostsStats.serverPaketsOutputPeriod[hostName] = 
 					m_HostsStats.serverPaketsOutput[hostName] - m_PrevHostsStats.serverPaketsOutput[hostName];
 			}
 
-		}
-
-		// getting the time from the beginning of stats collection until now
-		double diffSecTotal = curTime - m_StartTime;
-
-		// calculating total rate which is the change from beginning of stats collection until now divided by time passed from
-		// beginning of stats collection until now
-		if (diffSecTotal != 0)
-		{
-			m_GeneralStats.sslTrafficRate.totalRate = m_GeneralStats.amountOfSSLTraffic / diffSecTotal;
-			m_GeneralStats.sslPacketRate.totalRate = m_GeneralStats.numOfSSLPackets / diffSecTotal;
-			m_HostsStats.messageRate.totalRate = m_HostsStats.numOfMessages / diffSecTotal;
-
-			for(auto& item : m_HostsStats.serverTrafficInput) {
-				std::string hostName = item.first;
-				m_HostsStats.serverTrafficInputRate[hostName].totalRate = m_HostsStats.serverTrafficInput[hostName];
-				m_HostsStats.serverPaketsInputRate[hostName].totalRate = m_HostsStats.serverPaketsInput[hostName];
-			}
-			for(auto& item : m_HostsStats.serverTrafficOutput) {
-				std::string hostName = item.first;
-				m_HostsStats.serverTrafficOutputRate[hostName].totalRate = m_HostsStats.serverTrafficOutput[hostName];
-				m_HostsStats.serverPaketsOutputRate[hostName].totalRate = m_HostsStats.serverPaketsOutput[hostName];
-			}
 		}
 
 		// saving current numbers for using them in the next rate calculation
@@ -222,9 +188,9 @@ public:
 	}
 
 	/**
-	 * Get SSL general stats
+	 * Get general stats
 	 */
-	SSLGeneralStats& getGeneralStats() { return m_GeneralStats; }
+	GeneralStats& getGeneralStats() { return m_GeneralStats; }
 
 	/**
 	 * Get client-hello stats
@@ -269,10 +235,10 @@ private:
 		
 		// count traffic
 		int trafficInPaket = tcpLayer->getLayerPayloadSize();
-		m_GeneralStats.amountOfSSLTraffic += trafficInPaket;
+		m_GeneralStats.amountOfTraffic += trafficInPaket;
 
 		// count packet num
-		m_GeneralStats.numOfSSLPackets++;
+		m_GeneralStats.numOfPackets++;
 
 		// counting output packets and their size
 		if (devIP == srcIP) {
@@ -315,8 +281,6 @@ private:
 				// collect client-hello stats
 				if (clientHelloMessage != NULL)
 				{
-					m_HostsStats.numOfMessages++;
-
 					std::string hostName = "";
 					pcpp::SSLServerNameIndicationExtension* sniExt = clientHelloMessage->getExtensionOfType<pcpp::SSLServerNameIndicationExtension>();
 					if (sniExt != NULL)
@@ -354,8 +318,8 @@ private:
 	    return (((double) tv.tv_sec) + (double) (tv.tv_usec / 1000000.0));
 	}
 
-	SSLGeneralStats m_GeneralStats;
-	SSLGeneralStats m_PrevGeneralStats;
+	GeneralStats m_GeneralStats;
+	GeneralStats m_PrevGeneralStats;
 	HostsStats m_HostsStats;
 	HostsStats m_PrevHostsStats;
 

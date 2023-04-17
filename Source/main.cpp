@@ -21,7 +21,6 @@
 #include <gtest/gtest.h>
 
 TEST(TestingDevice, CheckDeviceEth0NotNull) {
-    //pcpp::PcapLiveDevice* dev = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName("eth0");
     ASSERT_FALSE(pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName("eth0") == NULL);
 }
 
@@ -98,20 +97,19 @@ void printStatsSummary(StatsCollector& collector)
 {
 	printStatsHeadline("General stats");
 	print_stat_line("Sample time", collector.getGeneralStats().sampleTime, "Seconds", true);
-	print_stat_line("Number of packets", collector.getGeneralStats().numOfSSLPackets, "Packets", true);
-	print_stat_line("Rate of packets", collector.getGeneralStats().sslPacketRate.totalRate, "Packets/sec", true);
-	print_stat_line("Total data", collector.getGeneralStats().amountOfSSLTraffic, "Bytes", true);
-	print_stat_line("Rate of data", collector.getGeneralStats().sslTrafficRate.totalRate, "Bytes/sec", true);
-	print_stat_line("Client-hello message", collector.getClientHelloStats().numOfMessages, "Messages", false);
+	print_stat_line("Number of packets", collector.getGeneralStats().numOfPackets, "Packets", true);
+	print_stat_line("Rate of packets", collector.getGeneralStats().numOfPackets / collector.getGeneralStats().sampleTime, "Packets/sec", true);
+	print_stat_line("Total data", collector.getGeneralStats().amountOfTraffic, "Bytes", true);
+	print_stat_line("Rate of data", collector.getGeneralStats().amountOfTraffic / collector.getGeneralStats().sampleTime, "Bytes/sec", true);
 
 	HostsStats hostsStatsToPrint = collector.getClientHelloStats();
 	printStatsHeadline("Summary traffic:");
 	for(auto& item : hostsStatsToPrint.serverName) 
 		print_traffic_information(item.second, 
-			hostsStatsToPrint.serverPaketsInputRate[item.first].totalRate,
-			hostsStatsToPrint.serverTrafficInputRate[item.first].totalRate, 
-			hostsStatsToPrint.serverPaketsOutputRate[item.first].totalRate,
-			hostsStatsToPrint.serverTrafficOutputRate[item.first].totalRate, "bytes", true);
+			hostsStatsToPrint.serverPaketsInput[item.first],
+			hostsStatsToPrint.serverTrafficInput[item.first], 
+			hostsStatsToPrint.serverPaketsOutput[item.first],
+			hostsStatsToPrint.serverTrafficOutput[item.first], "bytes", true);
 
 }
 
@@ -123,30 +121,15 @@ void printCurrentRates(StatsCollector& collector)
 {
 	HostsStats hostsStatsToPrint = collector.getClientHelloStats();
 
-	// printStatsHeadline("Current rates");
-	// print_stat_line("Rate of packets", collector.getGeneralStats().sslPacketRate.currentRate, "Packets/sec", true);
-	// print_stat_line("Rate of data", collector.getGeneralStats().sslTrafficRate.currentRate, "Bytes/sec", true);
-	// print_stat_line("Rate of requests", collector.getClientHelloStats().messageRate.currentRate, "Requests/sec", false);
-
 	printStatsHeadline("Current traffic:");
 	for(auto& item : hostsStatsToPrint.serverName) 
-		if (hostsStatsToPrint.serverTrafficInputRate[item.first].currentRate > 0 ||
-		hostsStatsToPrint.serverTrafficOutputRate[item.first].currentRate > 0)
+		if (hostsStatsToPrint.serverTrafficInputPeriod[item.first] > 0 ||
+		hostsStatsToPrint.serverTrafficOutputPeriod[item.first] > 0)
 			print_traffic_information(item.second, 
-				hostsStatsToPrint.serverPaketsInputRate[item.first].currentRate,
-				hostsStatsToPrint.serverTrafficInputRate[item.first].currentRate, 
-				hostsStatsToPrint.serverPaketsOutputRate[item.first].currentRate,
-				hostsStatsToPrint.serverTrafficOutputRate[item.first].currentRate, "bytes", true);
-
-	// printStatsHeadline("Traffic input:");
-	// for(auto& item : hostsStatsToPrint.serverTrafficInputRate)
-	// 	if (hostsStatsToPrint.serverName[item.first] != "" && item.second.currentRate != 0)
-	// 		print_stat_line( hostsStatsToPrint.serverName[item.first], item.second.currentRate, "Bytes", true);
-	// std::cout << std::endl;
-	// printStatsHeadline("Traffic output:");
-	// for(auto& item : hostsStatsToPrint.serverTrafficOutputRate)
-	// 	if (hostsStatsToPrint.serverName[item.first] != "" && item.second.currentRate != 0)
-	// 		print_stat_line(hostsStatsToPrint.serverName[item.first], item.second.currentRate, "Bytes", true);
+				hostsStatsToPrint.serverPaketsInputPeriod[item.first],
+				hostsStatsToPrint.serverTrafficInputPeriod[item.first], 
+				hostsStatsToPrint.serverPaketsOutputPeriod[item.first],
+				hostsStatsToPrint.serverTrafficOutputPeriod[item.first], "bytes", true);
 }
 
 
@@ -215,25 +198,24 @@ void analyzeLiveTraffic(pcpp::PcapLiveDevice* dev, bool printRatesPeriodically, 
  */
 int main(int argc, char* argv[])
 {
+	// Run all tests
 	testing::InitGoogleTest(&argc, argv);
 	int res = RUN_ALL_TESTS();
 	if (res == 1)
 		return 1;
 
+	// Getting path, where programm is running
 	char path[256];
 	size_t len = sizeof(path); 
 	int bytes = MIN(readlink("/proc/self/exe", path, len), len - 1);
-	if(bytes >= 0) {
-		path[bytes] = '\0';
-	}
-
+	path[bytes] = '\0';
 	// set level of logging and log path
 	FLAGS_logtostderr = false;
 	google::SetLogDestination(google::INFO, path);
 	// Initialize Google’s logging library.
     google::InitGoogleLogging(argv[0]);
 
-	std::cout << "Log path:" << std::string(path) <<  bytes << std::endl;
+	std::cout << "Log path:" << std::string(path) << std::endl;
 	LOG(INFO) << "Log path:" << std::string(path);
 
 	bool printRatesPeriodically = true;
@@ -264,12 +246,6 @@ int main(int argc, char* argv[])
 	LOG(INFO) << "   Default gateway:       " << dev->getDefaultGateway();
 	LOG(INFO) << "   IPv4:                  " << dev->getIPv4Address().toString();
 	LOG(INFO) << "   Interface MTU:         " << dev->getMtu();
-
-
-	// LOG(WARNING) << "Warned";
-	// LOG(ERROR) << "Errored";
-	// LOG(FATAL) << "Fataled";
-
 
     // start capturing and analyzing traffic
     analyzeLiveTraffic(dev, printRatesPeriodically, printRatePeriod);
